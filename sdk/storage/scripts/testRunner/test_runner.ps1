@@ -248,19 +248,19 @@ function refresh {
         }
     }
 
-    $regex = "(public void) (\w+) *\([^\)]*\) *(\{?|[^;])"
+    $regex = "public void (\w+) *\(([^)]*)\) *\{"
     ForEach($test in $allFiles) {
-        $foundMethods = Select-String -Path $test.testFilePath -Pattern $regex
-        ForEach($method in $foundMethods.Line) {
+        $fileContent = Get-Content -Path $test.testFilePath
+        $foundMethods = [regex]::Matches($fileContent, $regex)
+        ForEach($method in $foundMethods) {
             #skipping commented out tests
             if($method -Match "//") {
                 continue
             }
 
             #formatting
-            $method = $method.Trim()
-            $method = $method.Replace("public void ", "")
-            $method = $method.Replace(" {", "")
+            $parameters = $method.Groups[2].Value -replace '\s+', ' '
+            $method = $method.Groups[1].Value + "(" + $parameters + ")"
 
             #add to table
             $dt.Rows.Add($test.packageName, $test.testFileName, $method)
@@ -329,4 +329,8 @@ function buildTestCommand {
 $radioPanel.controls.AddRange(@($liveRadio,$recordRadio,$playbackRadio))
 $TestRunner.controls.AddRange(@($packageComboBox,$fileComboBox,$testComboBox,$packageClearButton,$fileClearButton,$testClearButton,$radioPanel,$debugCheckBox,$fiddlerCheckBox,$runButton,$refreshButton))
 
-[void]$TestRunner.ShowDialog()
+try{
+    [void]$TestRunner.ShowDialog()
+} finally {
+    $TestRunner.Dispose()
+}
