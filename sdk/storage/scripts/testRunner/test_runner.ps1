@@ -29,7 +29,7 @@ $packageComboBox.text            = "no package selected"
 $packageComboBox.width           = 300
 $packageComboBox.height          = 30
 $packageComboBox.location        = New-Object System.Drawing.Point(25,30)
-$packageComboBox.AutoCompleteMode = [System.Windows.Forms.AutoCompleteMode]::SuggestAppend
+$packageComboBox.AutoCompleteMode = [System.Windows.Forms.AutoCompleteMode]::Append
 $packageComboBox.AutoCompleteSource = [System.Windows.Forms.AutoCompleteSource]::ListItems
 $packageComboBox.add_SelectedIndexChanged({packageSelection})
 
@@ -38,7 +38,7 @@ $fileComboBox.text               = "no file selected"
 $fileComboBox.width              = 300
 $fileComboBox.height             = 30
 $fileComboBox.location           = New-Object System.Drawing.Point(25,80)
-$fileComboBox.AutoCompleteMode   = [System.Windows.Forms.AutoCompleteMode]::SuggestAppend
+$fileComboBox.AutoCompleteMode   = [System.Windows.Forms.AutoCompleteMode]::Append
 $fileComboBox.AutoCompleteSource = [System.Windows.Forms.AutoCompleteSource]::ListItems
 $fileComboBox.add_SelectedIndexChanged({fileSelection})
 
@@ -47,7 +47,7 @@ $testComboBox.text               = "no test selected"
 $testComboBox.width              = 300
 $testComboBox.height             = 30
 $testComboBox.location           = New-Object System.Drawing.Point(25,130)
-$testComboBox.AutoCompleteMode   = [System.Windows.Forms.AutoCompleteMode]::SuggestAppend
+$testComboBox.AutoCompleteMode   = [System.Windows.Forms.AutoCompleteMode]::Append
 $testComboBox.AutoCompleteSource = [System.Windows.Forms.AutoCompleteSource]::ListItems
 $testComboBox.add_SelectedIndexChanged({testSelection})
 
@@ -130,6 +130,15 @@ $refreshButton.Font               = New-Object System.Drawing.Font('Microsoft Sa
 $refreshButton.ForeColor          = [System.Drawing.ColorTranslator]::FromHtml("#ffffff")
 $refreshButton.BackColor          = [System.Drawing.ColorTranslator]::FromHtml("#4c4f88")
 $refreshButton.add_click({refresh})
+
+$rebuildButton                    = New-Object system.Windows.Forms.Button
+$rebuildButton.text               = "Rebuild Package"
+$rebuildButton.AutoSize           = $true
+$rebuildButton.location           = New-Object System.Drawing.Point(140,240)
+$rebuildButton.Font               = New-Object System.Drawing.Font('Microsoft Sans Serif',12)
+$rebuildButton.ForeColor          = [System.Drawing.ColorTranslator]::FromHtml("#ffffff")
+$rebuildButton.BackColor          = [System.Drawing.ColorTranslator]::FromHtml("#4c4f88")
+$rebuildButton.add_click({rebuild})
 
 $runButton                         = New-Object system.Windows.Forms.Button
 $runButton.text                    = "Run"
@@ -248,16 +257,11 @@ function refresh {
         }
     }
 
-    $regex = "public void (\w+) *\(([^)]*)\) *\{"
+    $regex = "public void (\w+) *\(([^)]*)\) *(throws [\w, ]+)? *\{"
     ForEach($test in $allFiles) {
         $fileContent = Get-Content -Path $test.testFilePath
         $foundMethods = [regex]::Matches($fileContent, $regex)
         ForEach($method in $foundMethods) {
-            #skipping commented out tests
-            if($method -Match "//") {
-                continue
-            }
-
             #formatting
             $parameters = $method.Groups[2].Value -replace '\s+', ' '
             $method = $method.Groups[1].Value + "(" + $parameters + ")"
@@ -279,7 +283,6 @@ function refresh {
 function runTest {
     $testCommandResults = buildTestCommand
     $command = "Start-Process pwsh -ArgumentList `"-noexit`", `"-command $testCommandResults`""
-    Write-Host $command
     Invoke-Expression($command)
 }
 
@@ -322,12 +325,34 @@ function buildTestCommand {
     }
 
     $command = "mvn --% -f " + $pomPath + " " + $dTest + " -DAZURE_TEST_MODE=" + $mode + $debugEnabled + $fiddlerEnabled + " test"
-    Write-Host $command
+    #Write-Host $command
+    return $command
+}
+
+function rebuild {
+    $rebuildCommandResults = rebuildCommand
+    $scriptBlock = [scriptblock]::Create($rebuildCommandResults)
+    Start-Process pwsh -ArgumentList '-NoExit', '-Command', $scriptBlock.ToString()
+}
+
+function rebuildCommand {
+    $module = ""
+
+    if ($global:currentPackage) {
+        $module = "com.azure:" + $global:currentPackage
+        $command = @"
+mvn clean install --% -f pom.xml -pl $module -am -Dgpg.skip=true -DskipTests=true -Dmaven.javadocs.skip=true -Dcheckstyle.skip=true -Dspotbugs.skip=true -Drevapi.skip=true
+"@
+    } else {
+        $rebuildButton.text  = "No Package Selected"
+        $command = ""
+    }
+
     return $command
 }
 
 $radioPanel.controls.AddRange(@($liveRadio,$recordRadio,$playbackRadio))
-$TestRunner.controls.AddRange(@($packageComboBox,$fileComboBox,$testComboBox,$packageClearButton,$fileClearButton,$testClearButton,$radioPanel,$debugCheckBox,$fiddlerCheckBox,$runButton,$refreshButton))
+$TestRunner.controls.AddRange(@($packageComboBox,$fileComboBox,$testComboBox,$packageClearButton,$fileClearButton,$testClearButton,$radioPanel,$debugCheckBox,$fiddlerCheckBox,$refreshButton,$rebuildButton,$runButton))
 
 try{
     [void]$TestRunner.ShowDialog()
