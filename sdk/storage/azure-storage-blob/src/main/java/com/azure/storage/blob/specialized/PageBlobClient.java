@@ -505,7 +505,7 @@ public final class PageBlobClient extends BlobClientBase {
      */
     @ServiceMethod(returns = ReturnType.SINGLE)
     public PageBlobItem uploadPages(PageRange pageRange, InputStream body) {
-        return uploadPagesWithResponse(pageRange, body, null, null, null, Context.NONE).getValue();
+        return uploadPagesWithResponse(pageRange, body, null, null, Context.NONE).getValue();
     }
 
     /**
@@ -551,39 +551,50 @@ public final class PageBlobClient extends BlobClientBase {
      * @return The information of the uploaded pages.
      * @throws UnexpectedLengthException when the length of data does not match the input {@code length}.
      * @throws NullPointerException if the input data is null.
+     * @deprecated Use {@link #uploadPagesWithResponse(PageRange, InputStream, PageBlobUploadPagesOptions, Duration,
+     * Context)}. The optional {@code contentMd5} and {@code pageBlobRequestConditions} parameters are now carried by
+     * {@link PageBlobUploadPagesOptions}, which is also forward-compatible with future optional settings such as
+     * transfer content validation.
      */
+    @Deprecated
     @ServiceMethod(returns = ReturnType.SINGLE)
     public Response<PageBlobItem> uploadPagesWithResponse(PageRange pageRange, InputStream body, byte[] contentMd5,
         PageBlobRequestConditions pageBlobRequestConditions, Duration timeout, Context context) {
-        return uploadPagesWithResponse(new PageBlobUploadPagesOptions(pageRange, body).setContentMd5(contentMd5)
-            .setRequestConditions(pageBlobRequestConditions), timeout, context);
+        return uploadPagesWithResponse(pageRange, body,
+            new PageBlobUploadPagesOptions().setContentMd5(contentMd5).setRequestConditions(pageBlobRequestConditions),
+            timeout, context);
     }
 
     /**
-     * Writes one or more pages to the page blob with options.
+     * Writes one or more pages to the page blob. The write size must be a multiple of 512. For more information, see
+     * the <a href="https://docs.microsoft.com/rest/api/storageservices/put-page">Azure Docs</a>.
+     * <p>
+     * Note that the data passed must be markable so that it can be replayed on retries (enabled by default).
      *
-     * @param options {@link PageBlobUploadPagesOptions}
-     * @param timeout An optional timeout value.
-     * @param context Additional context.
+     * @param pageRange A {@link PageRange} object. Given that pages must be aligned with 512-byte boundaries, the start
+     * offset must be a modulus of 512 and the end offset must be a modulus of 512 - 1. Examples of valid byte ranges
+     * are 0-511, 512-1023, etc.
+     * @param body The data to upload. The data must be markable. This is in order to support retries. If the data is
+     * not markable, consider using {@link #getBlobOutputStream(PageRange)} and writing to the returned OutputStream.
+     * Alternatively, consider wrapping your data source in a {@link java.io.BufferedInputStream} to add mark support.
+     * @param options {@link PageBlobUploadPagesOptions} carrying optional settings for the upload, such as a content
+     * MD5, request conditions, or a transfer content validation algorithm. May be {@code null}.
+     * @param timeout An optional timeout value beyond which a {@link RuntimeException} will be raised.
+     * @param context Additional context that is passed through the Http pipeline during the service call.
      * @return The information of the uploaded pages.
-     * @throws NullPointerException If {@code options} is {@code null}.
-     * @throws IllegalArgumentException if options is not constructed with InputStream.
      * @throws UnexpectedLengthException If the length of the data read from the provided stream does not match the
      * expected length based on the specified page range.
+     * @throws NullPointerException if {@code pageRange} or {@code body} is null.
      */
     @ServiceMethod(returns = ReturnType.SINGLE)
-    public Response<PageBlobItem> uploadPagesWithResponse(PageBlobUploadPagesOptions options, Duration timeout,
-        Context context) {
-        StorageImplUtils.assertNotNull("options", options);
-        if (options.getDataStream() == null) {
-            throw LOGGER.logExceptionAsError(new IllegalArgumentException(
-                "PageBlobUploadPagesOptions must be constructed with InputStream for sync client."));
-        }
-        final long length = options.getPageRange().getEnd() - options.getPageRange().getStart() + 1;
-        Flux<ByteBuffer> fbb = Utility.convertStreamToByteBuffer(options.getDataStream(), length, PAGE_BYTES, true);
+    public Response<PageBlobItem> uploadPagesWithResponse(PageRange pageRange, InputStream body,
+        PageBlobUploadPagesOptions options, Duration timeout, Context context) {
+        StorageImplUtils.assertNotNull("pageRange", pageRange);
+        StorageImplUtils.assertNotNull("body", body);
+        final long length = pageRange.getEnd() - pageRange.getStart() + 1;
+        Flux<ByteBuffer> fbb = Utility.convertStreamToByteBuffer(body, length, PAGE_BYTES, true);
         Mono<Response<PageBlobItem>> response
-            = pageBlobAsyncClient.uploadPagesWithResponseInternal(options.getPageRange(), fbb, options.getContentMd5(),
-                options.getRequestConditions(), options.getContentValidationAlgorithm(), context);
+            = pageBlobAsyncClient.uploadPagesWithResponseInternal(pageRange, fbb, options, context);
         return StorageImplUtils.blockWithOptionalTimeout(response, timeout);
     }
 

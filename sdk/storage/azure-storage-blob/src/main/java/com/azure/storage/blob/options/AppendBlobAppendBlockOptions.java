@@ -7,86 +7,25 @@ import com.azure.core.annotation.Fluent;
 import com.azure.core.util.CoreUtils;
 import com.azure.storage.blob.models.AppendBlobRequestConditions;
 import com.azure.storage.common.ContentValidationAlgorithm;
-import com.azure.storage.common.implementation.StorageImplUtils;
-
-import reactor.core.publisher.Flux;
-
-import java.io.InputStream;
-import java.nio.ByteBuffer;
 
 /**
  * Extended options that may be passed when appending a block to an append blob.
+ * <p>
+ * The block data ({@code data}) and its {@code length} are required inputs and are passed directly to the
+ * {@code appendBlockWithResponse} method, not through this options bag. This keeps the payload type correct at compile
+ * time for each client ({@code Flux<ByteBuffer>} for the async client, {@code InputStream} for the sync client) and
+ * reserves this options bag for optional settings only.
  */
 @Fluent
 public final class AppendBlobAppendBlockOptions {
-    private final InputStream dataStream;
-    private final Flux<ByteBuffer> dataFlux;
-    private final long length;
     private byte[] contentMd5;
     private AppendBlobRequestConditions requestConditions;
     private ContentValidationAlgorithm contentValidationAlgorithm;
 
     /**
-     * Creates a new instance of {@link AppendBlobAppendBlockOptions} for use with the sync client.
-     *
-     * @param data The data to write to the blob. Must be markable for retries.
-     * @param length The exact length of the data.
-     * @throws NullPointerException If {@code data} is null.
-     * @throws IllegalArgumentException If {@code length} is negative.
+     * Creates a new instance of {@link AppendBlobAppendBlockOptions}.
      */
-    public AppendBlobAppendBlockOptions(InputStream data, long length) {
-        StorageImplUtils.assertNotNull("data", data);
-        if (length < 0) {
-            throw new IllegalArgumentException("'length' must be >= 0");
-        }
-        this.dataStream = data;
-        this.dataFlux = null;
-        this.length = length;
-    }
-
-    /**
-     * Creates a new instance of {@link AppendBlobAppendBlockOptions} for use with the async client.
-     *
-     * @param data The data to write to the blob. Must be replayable if retries are enabled.
-     * @param length The exact length of the data.
-     * @throws NullPointerException If {@code data} is null.
-     * @throws IllegalArgumentException If {@code length} is negative.
-     */
-    public AppendBlobAppendBlockOptions(Flux<ByteBuffer> data, long length) {
-        StorageImplUtils.assertNotNull("data", data);
-        if (length < 0) {
-            throw new IllegalArgumentException("'length' must be >= 0");
-        }
-        this.dataStream = null;
-        this.dataFlux = data;
-        this.length = length;
-    }
-
-    /**
-     * Gets the body as an InputStream. Null if constructed with {@link Flux}.
-     *
-     * @return The body stream, or null.
-     */
-    public InputStream getDataStream() {
-        return dataStream;
-    }
-
-    /**
-     * Gets the body as a Flux. Null if constructed with {@link InputStream}.
-     *
-     * @return The body flux, or null.
-     */
-    public Flux<ByteBuffer> getDataFlux() {
-        return dataFlux;
-    }
-
-    /**
-     * Gets the exact length of the block data.
-     *
-     * @return The length in bytes.
-     */
-    public long getLength() {
-        return length;
+    public AppendBlobAppendBlockOptions() {
     }
 
     /**
